@@ -44,7 +44,9 @@
 #define COLOR_ORDER GRB
 CRGB leds[NUM_LEDS];
 
-#define SAMPLECOUNT  3
+#define RANGEFINDER_SAMPLECOUNT  2
+#define DELTA_AVERAGE_SAMPLECOUNT  3
+#define POT_SAMPLECOUNT  3
 #define UPDATES_PER_SECOND 100
 #define SLOW_GLOW_SPEED 20
 
@@ -67,6 +69,7 @@ CRGB leds[NUM_LEDS];
 
 
 
+
 CRGBPalette16 currentPalette;
 TBlendType    currentBlending;
 
@@ -75,7 +78,6 @@ extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
 //################################################################################################
 // TIME OF FLIGHT DEMO
-
 //Adafruit_VL53L0X lox = Adafruit_VL53L0X();
 //
 //void setup() {
@@ -162,49 +164,8 @@ extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 //################################################################################################
 // FAST LED ADJUSTABLE -
 //
-int potPin = A0;  //Declare potPin to be analog pin A0
-int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
-int readValue;  // Use this variable to read Potentiometer
-int writeValue; // Use this variable for writing to LED
 
-int switchPin = 2;         // the number of the input pin
-//int outPin = 13;       // the number of the output pin
-
-int state = HIGH;      // the current state of the output pin
-int reading;           // the current reading from the input pin
-int previous = LOW;    // the previous reading from the input pin
-
-// the follow variables are long's because the time, measured in miliseconds,
-// will quickly become a bigger number than can be stored in an int.
-long time = 0;         // the last time the output pin was toggled
-long debounce = 500;   // the debounce time, increase if the output flickers
-
-void setup() {
-	delay(3000); // power-up safety delay
-	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-	FastLED.setBrightness(STANDBY_BRIGHTNESS);
-
-	SetupBlackAndWhiteStripedPalette();
-	//currentPalette = RainbowColors_p;
-	currentBlending = LINEARBLEND;
-
-	pinMode(potPin, INPUT);  //set potPin to be an input
-	pinMode(LEDPin, OUTPUT); //set LEDPin to be an OUTPUT
-	Serial.begin(9600);      // turn on Serial Port
-
-	pinMode(switchPin, INPUT_PULLUP); //set the mode switch
-}
-
-
-void loop()
-{
-	static uint8_t startIndex = 0;
-	//ChangePalettePeriodically();
-
-	reading = digitalRead(switchPin);
-	startIndex = startIndex + 1; /* motion speed */
-
-	//For pushbutton logic
+//For pushbutton logic
 	// if the input just went from LOW and HIGH and we've waited long enough
 	// to ignore any noise on the circuit, toggle the output pin and remember
 	// the time
@@ -213,51 +174,333 @@ void loop()
 	//		state = LOW;
 	//	else
 	//		state = HIGH;
-
 	//	time = millis();
 	//}
 
-	state = reading;
-	previous = reading;
+#define IS_LEDCONTROLLER  0
 
-	if (state == HIGH) {
-		//-------   SPIN!!!  -------------------
-		readValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-		if (readValue > 2) {
-			FastLED.setBrightness(FULL_BRIGHTNESS);
-			writeValue = ((255. / 1023.) * readValue) + 1;
-			if (writeValue > 200) {
-				// SUPER FAST SPIN
-				currentPalette = RainbowStripeColors_p;
-				currentBlending = LINEARBLEND;
+int potPin = A0;  //Declare potPin to be analog pin A0
+int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
+int potReadValue;  // Use this variable to read Potentiometer
+int speedValue; // Use this variable for writing to LED
+
+int switchPin = 2;         // the number of the input pin
+//int outPin = 13;       // the number of the output pin
+
+int modeSwitchState = HIGH;      // the current state of the output pin
+int previousModeSwitchPos = LOW;    // the previous reading from the input pin
+
+// the follow variables are long's because the time, measured in miliseconds,
+// will quickly become a bigger number than can be stored in an int.
+long time = 0;         // the last time the output pin was toggled
+long debounce = 500;   // the debounce time, increase if the output flickers
+
+bool DIRECTION_IS_TOWARDS = true;
+
+int MAX_SPEED_DISTANCE_DELTA_MM = 300;
+
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+
+void setup() {
+	delay(3000); // power-up safety delay
+	
+	if (IS_LEDCONTROLLER) {
+		FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+		FastLED.setBrightness(STANDBY_BRIGHTNESS);
+
+		SetupBlackAndWhiteStripedPalette();
+		currentBlending = LINEARBLEND;
+		pinMode(switchPin, INPUT_PULLUP); //set the mode switch
+
+		Wire.begin(9);
+		// Attach a function to trigger when something is received.
+		Wire.onReceive(receiveEvent);
+		//Wire.onRequest(requestEvent);
+
+	}
+	else {
+		lox.begin();
+		Wire.begin();
+		pinMode(potPin, INPUT);  //set potPin to be an input
+	}
+	//Serial.begin(9600);      // turn on Serial Port
+
+}
+
+
+void loop()
+{
+	if (!IS_LEDCONTROLLER) {
+		//Get the speed rating and communicate to the LED Controller
+		EnterSpeedSensorLoop();
+	}
+	else {
+		//Handle the speed value and control the LEDs accordingly
+		EnterLEDLoop();
+	}
+}
+
+void EnterSpeedSensorLoop() {
+	while (1) {
+		//static int16_t direction = 1;
+		static int16_t lastDeltaMeasure = 0;
+		static int16_t speed = 0;
+		static int16_t lastSpeed = 0;
+		static bool manualMode = false;
+		VL53L0X_RangingMeasurementData_t measure;
+
+		long goodRangeSamples = 0;
+
+		float currentDeltaMeasure = 0;
+		long currentDeltaTotal = 0;
+		long goodDeltaSamples = 0;
+
+		static bool goodChangeDetected = false;
+
+		goodChangeDetected = false;
+
+		if (manualMode == false)
+		{
+			//############################################################
+			//Using the TIME OF FLIGHT Sensor
+			//============================================================
+			//-----------------------------------------------
+			//LOOP TO GET SAMPLES FROM RANGE FINDER
+			int16_t lastMeasure = 0;
+			for (size_t i = 0; i < DELTA_AVERAGE_SAMPLECOUNT; i++)
+			{
+				//reset our count of good range samples of each bigger loop
+				uint16_t lastSample = 0;
+				uint16_t thisSample = 0;
+				long currentMeasure = 0;
+				goodRangeSamples = 0;
+				//-----------------------------------------------
+				//LOOP TO GET SAMPLES FROM RANGE FINDER
+				for (size_t x = 0; x < RANGEFINDER_SAMPLECOUNT; x++)
+				{
+					//need at least two consecutive in the same direction, 
+					//then 
+
+					lox.rangingTest(&measure, true);
+					if (measure.RangeStatus != 4)
+					{
+						thisSample = measure.RangeMilliMeter;
+
+						//Only measure getting closer....
+						//also allow last sample to be zero.
+						if (lastSample == 0)
+						{
+							if (thisSample != 0)
+							{
+								lastSample = thisSample;
+								currentMeasure += thisSample;
+								goodRangeSamples++;
+							}
+						}
+						else
+						{
+							if ((DIRECTION_IS_TOWARDS && lastSample >= thisSample - 40) ||
+								lastSample <= thisSample +40)
+							{
+								currentMeasure += thisSample;
+								goodRangeSamples++;
+							}
+							else
+							{
+								//throw this loop away;
+								goodRangeSamples = 0;
+								break;
+							}
+						}
+
+						lastSample = thisSample;
+					}
+				}
+				//END OF RANGEFINDER_SAMPLECOUNT LOOP
+				//-----------------------------------------------
+				//Test the samples and average them
+				if (goodRangeSamples > 0)
+				{
+					currentMeasure = currentMeasure / goodRangeSamples;
+
+					//We need at least one pass to make a diff.
+					if (lastMeasure != 0)
+					{
+						if (currentMeasure < 5)
+						{
+							//ignore small noise
+						}
+						else
+						{
+							if (DIRECTION_IS_TOWARDS)
+							{
+								currentDeltaTotal += lastMeasure - currentMeasure;
+							}
+							else
+							{
+								currentDeltaTotal += currentMeasure - lastMeasure;
+							}
+							goodDeltaSamples++;
+						}
+					}
+
+					lastMeasure = currentMeasure;
+				}
+				//-----------------------------------------------
+			}
+			//END OF DELTA_AVERAGE_SAMPLECOUNT LOOP
+			//============================================================
+			if (goodDeltaSamples > 0)
+			{
+				currentDeltaMeasure = currentDeltaTotal / goodDeltaSamples;
+				goodChangeDetected = true;
+
+				//Since the TOWARDS direct gives negative deltas...
+			}
+			//############################################################
+		}
+		else
+		{
+			//--------------------------------------
+			//For manually testing the speed using the dial
+			//potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
+			//if (potReadValue > 2) {
+			//	deltaMeasure = ((255. / 1023.) * potReadValue) + 1;
+			//}
+
+			long currentMeasure = 0;
+			for (size_t i = 0; i < POT_SAMPLECOUNT; i++)
+			{
+				potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
+
+				currentMeasure += ((255. / 1023.) * potReadValue) + 1;
+				goodRangeSamples++;
+			}
+
+			if (goodRangeSamples > 0) {
+				currentMeasure = currentMeasure / goodRangeSamples;
+
+				//Since we are manually setting the speed, just take the value.
+				currentDeltaMeasure = currentMeasure;
+
+				if (currentDeltaMeasure < 5) {
+					//ignore small noise
+					currentDeltaMeasure = 0;
+				}
+				//always when manual
+				goodChangeDetected = true;
 			}
 			else {
-				//REGULAR SPIN
-				SetupBlackAndWhiteStripedPalette();
+				currentDeltaMeasure = 0;
+			}
+
+		}
+
+		//--------------------------------------
+
+		if (goodChangeDetected && lastDeltaMeasure != currentDeltaMeasure) {
+
+			//ignore bacwards
+			if (currentDeltaMeasure < 0)
+				currentDeltaMeasure = 0;
+
+			//send the message
+			//Speed is 0-255
+			//MAX Speed is determined is a closing distance of 300mm
+			//speed = 254 * (deltaMeasure / MAX_SPEED_DISTANCE_DELTA_MM);
+			speed = 254 * (currentDeltaMeasure / 256.);
+			if (speed > 254) {
+				speed = 254;
+			}
+			//send the speed value over I2C
+			Wire.beginTransmission(9); // transmit to device #9
+			Wire.write(speed);              // sends x 
+			Wire.endTransmission();    // stop transmitting
+
+			//only remember if we got a good change detection
+			lastDeltaMeasure = currentDeltaMeasure;
+		}
+
+		delay(200);
+	}
+}
+
+void EnterLEDLoop() {
+	while (1) {
+		static uint8_t startIndex = 0;
+		static uint8_t localSpeedValue = 0;
+		static uint8_t standbyGlowSpeed = SLOW_GLOW_SPEED;
+		localSpeedValue = speedValue;
+
+		modeSwitchState = digitalRead(switchPin);
+		previousModeSwitchPos = modeSwitchState;
+		startIndex = startIndex + 1; /* motion speed */
+
+		if (modeSwitchState == HIGH) {
+			//-------   SPIN!!!  -------------------
+			if (localSpeedValue > 2) {
+				FastLED.setBrightness(FULL_BRIGHTNESS);
+				if (localSpeedValue > 200) {
+					// SUPER FAST SPIN
+					currentPalette = RainbowStripeColors_p;
+					currentBlending = LINEARBLEND;
+				}
+				else {
+					//REGULAR SPIN
+					SetupBlackAndWhiteStripedPalette();
+					currentBlending = LINEARBLEND;
+				}
+			}
+			else {
+				//NOT MOVING Glow
+				FastLED.setBrightness(NOT_MOVING_BRIGHTNESS);
+				currentPalette = PartyColors_p;
 				currentBlending = LINEARBLEND;
+				localSpeedValue = SLOW_GLOW_SPEED;
 			}
 		}
 		else {
-			//NOT MOVING Glow
-			FastLED.setBrightness(NOT_MOVING_BRIGHTNESS);
-			currentPalette = PartyColors_p;
+			//-------   STANDBY  -------------------
+			FastLED.setBrightness(STANDBY_BRIGHTNESS);
+			startIndex = startIndex + 1; /* motion speed */
+			currentPalette = RainbowColors_p;
 			currentBlending = LINEARBLEND;
-			writeValue = SLOW_GLOW_SPEED;
+
+			potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
+			if (potReadValue > 2) {
+				standbyGlowSpeed = ((255. / 1023.) * potReadValue) + 1;
+				if (standbyGlowSpeed > 255)
+					standbyGlowSpeed = 255;
+				else if (standbyGlowSpeed < 1)
+					standbyGlowSpeed = 1;
+			}
+			else {
+				standbyGlowSpeed = SLOW_GLOW_SPEED;
+			}
+			localSpeedValue = standbyGlowSpeed;
+		}
+
+		FillLEDsFromPaletteColors(startIndex);
+		FastLED.show();
+		FastLED.delay(1000 / localSpeedValue);
+	}
+}
+
+void receiveEvent(int bytes) {
+	static uint8_t localReadSpeedValue = 0; 
+	// read one character from the I2C
+	localReadSpeedValue = Wire.read();
+	if (localReadSpeedValue == 0)
+		localReadSpeedValue = 1;
+	else {
+		if (localReadSpeedValue > 254) {
+			localReadSpeedValue = 254;
 		}
 	}
-	else {
-		//-------   STANDBY  -------------------
-		FastLED.setBrightness(STANDBY_BRIGHTNESS);
-		startIndex = startIndex + 1; /* motion speed */
-		currentPalette = RainbowColors_p;
-		currentBlending = LINEARBLEND;
-		writeValue = SLOW_GLOW_SPEED;
-	}
-
-	FillLEDsFromPaletteColors(startIndex);
-	FastLED.show();
-	FastLED.delay(1000 / writeValue);
+	speedValue = localReadSpeedValue;    
 }
+
 //###################################################################################
 
 //Adafruit_VL53L0X lox = Adafruit_VL53L0X();
