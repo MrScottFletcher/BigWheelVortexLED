@@ -1,36 +1,10 @@
-// Visual Micro is in vMicro>General>Tutorial Mode
-// 
 /*
     Name:       BigWheelVortex.ino
     Created:	9/23/2019 10:15:57 PM
-    Author:     DESKTOP-62IO2EV\scott
+    Author:     Scott Fletcher
+	With FULL credit to the internet for various sample, tutorials, and the like.
 */
 
-// Define User Types below here or use a .h file
-//
-
-
-// Define Function Prototypes that use User Types below here or use a .h file
-//
-
-
-// Define Functions below here or use other .ino or cpp files
-//
-
-
-//#include <vl53l0x_types.h>
-//#include <vl53l0x_tuning.h>
-//#include <vl53l0x_platform_log.h>
-//#include <vl53l0x_platform.h>
-//#include <vl53l0x_interrupt_threshold_settings.h>
-//#include <vl53l0x_i2c_platform.h>
-//#include <vl53l0x_device.h>
-//#include <vl53l0x_def.h>
-//#include <vl53l0x_api_strings.h>
-//#include <vl53l0x_api_ranging.h>
-//#include <vl53l0x_api_core.h>
-//#include <vl53l0x_api_calibration.h>
-//#include <vl53l0x_api.h>
 #include <Adafruit_VL53L0X.h>
 #include <FastLED.h>
 
@@ -45,30 +19,11 @@
 CRGB leds[NUM_LEDS];
 
 #define RANGEFINDER_SAMPLECOUNT  2
-#define DELTA_AVERAGE_SAMPLECOUNT  3
+#define DELTA_AVERAGE_SAMPLECOUNT  2
 #define POT_SAMPLECOUNT  3
 #define UPDATES_PER_SECOND 100
 #define SLOW_GLOW_SPEED 20
-
-// This example shows several ways to set up and use 'palettes' of colors
-// with FastLED.
-//
-// These compact palettes provide an easy way to re-colorize your
-// animation on the fly, quickly, easily, and with low overhead.
-//
-// USING palettes is MUCH simpler in practice than in theory, so first just
-// run this sketch, and watch the pretty lights as you then read through
-// the code.  Although this sketch has eight (or more) different color schemes,
-// the entire sketch compiles down to about 6.5K on AVR.
-//
-// FastLED provides a few pre-configured color palettes, and makes it
-// extremely easy to make up your own color schemes with palettes.
-//
-// Some notes on the more abstract 'theory and practice' of
-// FastLED compact palettes are at the bottom of this file.
-
-
-
+#define SPEED_SENSOR_LOOP_DELAY_MS 1
 
 CRGBPalette16 currentPalette;
 TBlendType    currentBlending;
@@ -76,128 +31,17 @@ TBlendType    currentBlending;
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
-//################################################################################################
-// TIME OF FLIGHT DEMO
-//Adafruit_VL53L0X lox = Adafruit_VL53L0X();
-//
-//void setup() {
-//	Serial.begin(115200);
-//
-//	// wait until serial port opens for native USB devices
-//	while (!Serial) {
-//		delay(1);
-//	}
-//
-//	Serial.println("Adafruit VL53L0X test");
-//	if (!lox.begin()) {
-//		Serial.println(F("Failed to boot VL53L0X"));
-//		while (1);
-//	}
-//	// power 
-//	Serial.println(F("VL53L0X API Simple Ranging example\n\n"));
-//}
-//
-//
-//void loop() {
-//	VL53L0X_RangingMeasurementData_t measure;
-//
-//	Serial.print("Reading a measurement... ");
-//	lox.rangingTest(&measure, false); // pass in 'true' to get debug data printout!
-//
-//	if (measure.RangeStatus != 4) {  // phase failures have incorrect data
-//		Serial.print("Distance (mm): "); Serial.println(measure.RangeMilliMeter);
-//	}
-//	else {
-//		Serial.println(" out of range ");
-//	}
-//
-//	delay(100);
-//}
-
-//################################################################################################
-// FAST LED DEMO -
-//
-//void setup() {
-//	delay(3000); // power-up safety delay
-//	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-//	FastLED.setBrightness(BRIGHTNESS);
-//
-//	currentPalette = RainbowColors_p;
-//	currentBlending = LINEARBLEND;
-//}
-//
-//
-//void loop()
-//{
-//	ChangePalettePeriodically();
-//
-//	static uint8_t startIndex = 0;
-//	startIndex = startIndex + 1; /* motion speed */
-//
-//	FillLEDsFromPaletteColors(startIndex);
-//
-//	FastLED.show();
-//	FastLED.delay(1000 / UPDATES_PER_SECOND);
-//}
-//###################################################################################
-//LED ADJUST WITH POT
-//int potPin = A0;  //Declare potPin to be analog pin A0
-//int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
-//int readValue;  // Use this variable to read Potentiometer
-//int writeValue; // Use this variable for writing to LED
-//
-//void setup() {
-//	pinMode(potPin, INPUT);  //set potPin to be an input
-//	pinMode(LEDPin, OUTPUT); //set LEDPin to be an OUTPUT
-//	Serial.begin(9600);      // turn on Serial Port
-//}
-//
-//void loop() {
-//
-//	readValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-//	writeValue = (255. / 1023.) * readValue; //Calculate Write Value for LED
-//	analogWrite(LEDPin, writeValue);      //Write to the LED
-//	Serial.print("You are writing a value of ");  //for debugging print your values
-//	Serial.println(writeValue);
-//
-//}
-//################################################################################################
-// FAST LED ADJUSTABLE -
-//
-
-//For pushbutton logic
-	// if the input just went from LOW and HIGH and we've waited long enough
-	// to ignore any noise on the circuit, toggle the output pin and remember
-	// the time
-	//if (reading == HIGH && previous == LOW && millis() - time > debounce) {
-	//	if (state == HIGH)
-	//		state = LOW;
-	//	else
-	//		state = HIGH;
-	//	time = millis();
-	//}
-
 #define IS_LEDCONTROLLER  0
 
 int potPin = A0;  //Declare potPin to be analog pin A0
 int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
-int potReadValue;  // Use this variable to read Potentiometer
 int speedValue; // Use this variable for writing to LED
 
-int switchPin = 2;         // the number of the input pin
-//int outPin = 13;       // the number of the output pin
-
-int modeSwitchState = HIGH;      // the current state of the output pin
-int previousModeSwitchPos = LOW;    // the previous reading from the input pin
-
-// the follow variables are long's because the time, measured in miliseconds,
-// will quickly become a bigger number than can be stored in an int.
-long time = 0;         // the last time the output pin was toggled
-long debounce = 500;   // the debounce time, increase if the output flickers
+int modeSwitchPin = 2;  // the number of the mode input pin
 
 bool DIRECTION_IS_TOWARDS = true;
 
-int MAX_SPEED_DISTANCE_DELTA_MM = 300;
+float MAX_POSSIBLE_SPEED_DISTANCE_DELTA_MM = 1100;
 
 Adafruit_VL53L0X lox = Adafruit_VL53L0X();
 
@@ -211,21 +55,17 @@ void setup() {
 
 		SetupBlackAndWhiteStripedPalette();
 		currentBlending = LINEARBLEND;
-		pinMode(switchPin, INPUT_PULLUP); //set the mode switch
+		pinMode(modeSwitchPin, INPUT_PULLUP); //set the mode switch
 
 		Wire.begin(9);
 		// Attach a function to trigger when something is received.
 		Wire.onReceive(receiveEvent);
-		//Wire.onRequest(requestEvent);
-
 	}
 	else {
 		lox.begin();
 		Wire.begin();
 		pinMode(potPin, INPUT);  //set potPin to be an input
 	}
-	//Serial.begin(9600);      // turn on Serial Port
-
 }
 
 
@@ -257,8 +97,24 @@ void EnterSpeedSensorLoop() {
 		long goodDeltaSamples = 0;
 
 		static bool goodChangeDetected = false;
+		static bool potChangeDetected = false;
 
 		goodChangeDetected = false;
+
+		long potReadValue = 0;
+		long currentPotMeasure = 0;
+		long goodPotSamples = 0;
+		for (size_t i = 0; i < POT_SAMPLECOUNT; i++)
+		{
+			potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
+
+			currentPotMeasure += ((255. / 1023.) * potReadValue) + 1;
+			goodPotSamples++;
+		}
+
+		if (goodPotSamples > 0) {
+			currentPotMeasure = currentPotMeasure / goodPotSamples;
+		}
 
 		if (manualMode == false)
 		{
@@ -280,8 +136,6 @@ void EnterSpeedSensorLoop() {
 				for (size_t x = 0; x < RANGEFINDER_SAMPLECOUNT; x++)
 				{
 					//need at least two consecutive in the same direction, 
-					//then 
-
 					lox.rangingTest(&measure, true);
 					if (measure.RangeStatus != 4)
 					{
@@ -364,37 +218,14 @@ void EnterSpeedSensorLoop() {
 		{
 			//--------------------------------------
 			//For manually testing the speed using the dial
-			//potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-			//if (potReadValue > 2) {
-			//	deltaMeasure = ((255. / 1023.) * potReadValue) + 1;
-			//}
+			currentDeltaMeasure = currentPotMeasure;
 
-			long currentMeasure = 0;
-			for (size_t i = 0; i < POT_SAMPLECOUNT; i++)
-			{
-				potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-
-				currentMeasure += ((255. / 1023.) * potReadValue) + 1;
-				goodRangeSamples++;
-			}
-
-			if (goodRangeSamples > 0) {
-				currentMeasure = currentMeasure / goodRangeSamples;
-
-				//Since we are manually setting the speed, just take the value.
-				currentDeltaMeasure = currentMeasure;
-
-				if (currentDeltaMeasure < 5) {
-					//ignore small noise
-					currentDeltaMeasure = 0;
-				}
-				//always when manual
-				goodChangeDetected = true;
-			}
-			else {
+			if (currentDeltaMeasure < 5) {
+				//ignore small noise
 				currentDeltaMeasure = 0;
 			}
-
+			//always when manual
+			goodChangeDetected = true;
 		}
 
 		//--------------------------------------
@@ -407,9 +238,11 @@ void EnterSpeedSensorLoop() {
 
 			//send the message
 			//Speed is 0-255
-			//MAX Speed is determined is a closing distance of 300mm
-			//speed = 254 * (deltaMeasure / MAX_SPEED_DISTANCE_DELTA_MM);
-			speed = 254 * (currentDeltaMeasure / 256.);
+			//MAX Speed is determined is a closing distance of something like 300mm
+			//determined by the POT value
+			//Do 1/2 of the potReadMax of 1024 to create a centerpoint of +/- adjustment
+			long maxSpeedDistanceDelta = MAX_POSSIBLE_SPEED_DISTANCE_DELTA_MM * (potReadValue / 512.);
+			speed = 254 * (currentDeltaMeasure / maxSpeedDistanceDelta);
 			if (speed > 254) {
 				speed = 254;
 			}
@@ -422,18 +255,21 @@ void EnterSpeedSensorLoop() {
 			lastDeltaMeasure = currentDeltaMeasure;
 		}
 
-		delay(200);
+		delay(SPEED_SENSOR_LOOP_DELAY_MS);
 	}
 }
 
 void EnterLEDLoop() {
+	int modeSwitchState = 0;
+	int previousModeSwitchPos = 0;
 	while (1) {
 		static uint8_t startIndex = 0;
 		static uint8_t localSpeedValue = 0;
 		static uint8_t standbyGlowSpeed = SLOW_GLOW_SPEED;
-		localSpeedValue = speedValue;
+		long potReadValue = 0;
 
-		modeSwitchState = digitalRead(switchPin);
+		localSpeedValue = speedValue;
+		modeSwitchState = digitalRead(modeSwitchPin);
 		previousModeSwitchPos = modeSwitchState;
 		startIndex = startIndex + 1; /* motion speed */
 
@@ -503,131 +339,6 @@ void receiveEvent(int bytes) {
 
 //###################################################################################
 
-//Adafruit_VL53L0X lox = Adafruit_VL53L0X();
-//
-//void setup() {
-//	delay(3000); // power-up safety delay
-//	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-//	FastLED.setBrightness(BRIGHTNESS);
-//
-//	currentPalette = RainbowColors_p;
-//	currentBlending = LINEARBLEND;
-//
-//	lox.begin();
-//}
-//
-//
-//void loop()
-//{
-//	ChangePalettePeriodically();
-//
-//	static uint8_t startIndex = 0;
-//	static uint8_t currentSpeed = 100;
-//
-//	startIndex = startIndex + 1; /* motion speed */
-//
-//	VL53L0X_RangingMeasurementData_t measure;
-//	if(startIndex % 5 == 0)
-//		lox.rangingTest(&measure, false);
-//
-//	FillLEDsFromPaletteColors(startIndex);
-//
-//	FastLED.show();
-//	FastLED.delay(1000 / UPDATES_PER_SECOND);
-//}
-
-//################################################################################################
-
-//Adafruit_VL53L0X lox = Adafruit_VL53L0X();
-//
-//void setup() {
-//	delay(3000); // power-up safety delay
-//	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-//	FastLED.setBrightness(BRIGHTNESS);
-//
-//	currentPalette = RainbowColors_p;
-//	currentBlending = LINEARBLEND;
-//
-//	lox.begin();
-//
-//		//Serial.begin(115200);
-//	
-//		//// wait until serial port opens for native USB devices
-//		//while (!Serial) {
-//		//	delay(1);
-//		//}
-//	
-//		//Serial.println("Adafruit VL53L0X test");
-//		//	Serial.println(F("Failed to boot VL53L0X"));
-//		//	while (1);
-//		//}
-//		// power 
-//		//if (!lox.begin()) {
-//		//Serial.println(F("VL53L0X API Simple Ranging example\n\n"));
-//
-//	SetupBlackAndWhiteStripedPalette();
-//	currentBlending = LINEARBLEND;
-//
-//}
-//
-//
-//void loop()
-//{
-//	//ChangePalettePeriodically();
-//
-//	static int16_t direction = 1;
-//
-//	static uint8_t startIndex = 100000;
-//
-//	static int16_t deltaMeasure = 0;
-//	static int16_t lastMeasure = 0;
-//	static int16_t currentMeasure = 0;
-//	static int16_t goodSamples = 0;
-//
-//	VL53L0X_RangingMeasurementData_t measure;
-//
-//	if (deltaMeasure > 0) {
-//		startIndex = startIndex + direction; /* motion speed */
-//	}
-//
-//	currentMeasure = 0;
-//	goodSamples = 0;
-//
-//	for (size_t i = 0; i < SAMPLECOUNT; i++)
-//	{
-//		lox.rangingTest(&measure, false);
-//		if (measure.RangeStatus != 4) {
-//			goodSamples++;
-//			currentMeasure += measure.RangeMilliMeter;
-//		}
-//	}
-//
-//	if (goodSamples > 0) {
-//		currentMeasure = currentMeasure / goodSamples;
-//
-//		deltaMeasure = currentMeasure - lastMeasure;
-//
-//		if (deltaMeasure < 0) {
-//			//flip to positive
-//			deltaMeasure = deltaMeasure * -1;
-//			direction = -1;
-//		}
-//		else {
-//			direction = 1;
-//		}
-//	}
-//
-//	lastMeasure = currentMeasure;
-//
-//	if (deltaMeasure > 0) {
-//		FillLEDsFromPaletteColors(startIndex);
-//		FastLED.show();
-//		FastLED.delay(500 / deltaMeasure);
-//	}
-//}
-
-
-//###################################################################################
 void FillLEDsFromPaletteColors(uint8_t colorIndex)
 {
 	uint8_t brightness = 255;
@@ -643,38 +354,6 @@ void FillLEDsFromPaletteColors(uint8_t colorIndex)
 //
 // FastLED provides several 'preset' palettes: RainbowColors_p, RainbowStripeColors_p,
 // OceanColors_p, CloudColors_p, LavaColors_p, ForestColors_p, and PartyColors_p.
-//
-// Additionally, you can manually define your own color palettes, or you can write
-// code that creates color palettes on the fly.  All are shown here.
-
-void ChangePalettePeriodically()
-{
-	uint8_t secondHand = (millis() / 1000) % 60;
-	static uint8_t lastSecond = 99;
-
-	if (lastSecond != secondHand) {
-		lastSecond = secondHand;
-		if (secondHand == 0) { currentPalette = RainbowColors_p;         currentBlending = LINEARBLEND; }
-		if (secondHand == 10) { currentPalette = RainbowStripeColors_p;   currentBlending = NOBLEND; }
-		if (secondHand == 15) { currentPalette = RainbowStripeColors_p;   currentBlending = LINEARBLEND; }
-		if (secondHand == 20) { SetupPurpleAndGreenPalette();             currentBlending = LINEARBLEND; }
-		if (secondHand == 25) { SetupTotallyRandomPalette();              currentBlending = LINEARBLEND; }
-		if (secondHand == 30) { SetupBlackAndWhiteStripedPalette();       currentBlending = NOBLEND; }
-		if (secondHand == 35) { SetupBlackAndWhiteStripedPalette();       currentBlending = LINEARBLEND; }
-		if (secondHand == 40) { currentPalette = CloudColors_p;           currentBlending = LINEARBLEND; }
-		if (secondHand == 45) { currentPalette = PartyColors_p;           currentBlending = LINEARBLEND; }
-		if (secondHand == 50) { currentPalette = myRedWhiteBluePalette_p; currentBlending = NOBLEND; }
-		if (secondHand == 55) { currentPalette = myRedWhiteBluePalette_p; currentBlending = LINEARBLEND; }
-	}
-}
-
-// This function fills the palette with totally random colors.
-void SetupTotallyRandomPalette()
-{
-	for (int i = 0; i < 16; i++) {
-		currentPalette[i] = CHSV(random8(), 255, random8());
-	}
-}
 
 // This function sets up a palette of black and white stripes,
 // using code.  Since the palette is effectively an array of
@@ -733,26 +412,3 @@ const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM =
 	CRGB::Black
 };
 
-
-
-// Additional notes on FastLED compact palettes:
-//
-// Normally, in computer graphics, the palette (or "color lookup table")
-// has 256 entries, each containing a specific 24-bit RGB color.  You can then
-// index into the color palette using a simple 8-bit (one byte) value.
-// A 256-entry color palette takes up 768 bytes of RAM, which on Arduino
-// is quite possibly "too many" bytes.
-//
-// FastLED does offer traditional 256-element palettes, for setups that
-// can afford the 768-byte cost in RAM.
-//
-// However, FastLED also offers a compact alternative.  FastLED offers
-// palettes that store 16 distinct entries, but can be accessed AS IF
-// they actually have 256 entries; this is accomplished by interpolating
-// between the 16 explicit entries to create fifteen intermediate palette
-// entries between each pair.
-//
-// So for example, if you set the first two explicit entries of a compact 
-// palette to Green (0,255,0) and Blue (0,0,255), and then retrieved 
-// the first sixteen entries from the virtual palette (of 256), you'd get
-// Green, followed by a smooth gradient from green-to-blue, and then Blue.
