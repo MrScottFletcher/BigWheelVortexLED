@@ -11,7 +11,7 @@
 #define LED_PIN     5
 #define NUM_LEDS    300
 #define STANDBY_BRIGHTNESS  64
-#define NOT_MOVING_BRIGHTNESS  128
+#define NOT_MOVING_BRIGHTNESS  64
 #define FULL_BRIGHTNESS  255
 //#define BRIGHTNESS  128
 #define LED_TYPE    WS2811
@@ -43,14 +43,14 @@ TBlendType    currentBlending;
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
-#define IS_LEDCONTROLLER  1
+#define IS_LEDCONTROLLER  0
 
 int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
 int speedValue; // Use this variable for writing to LED
 
 int modeSwitchPin = 7;  // the number of the mode input pin
 
-bool DIRECTION_IS_TOWARDS = true;
+bool DIRECTION_IS_TOWARDS = false;
 
 float FULL_ROTATION_DELTA = 600;
 float FULL_SPEED_DELTA_PER_SAMPLE = 300;
@@ -167,10 +167,8 @@ void EnterSpeedSensorLoop() {
 		if (modeSwitchState == HIGH)
 		{
 			//############################################################
-			//Using the TIME OF FLIGHT Sensor
+			//Using the rotary encoder
 			//============================================================
-			//-----------------------------------------------
-			//LOOP TO GET SAMPLES FROM RANGE FINDER
 
 			int newPos1 = encoder.getPosition();
 			delay(SPEED_SENSOR_SAMPLE_DELAY_MS);
@@ -202,6 +200,8 @@ void EnterSpeedSensorLoop() {
 			//--------------------------------------
 			//For manually testing the speed using the dial
 			currentDeltaMeasure = currentPotMeasure;
+			if(currentDeltaMeasure < 0)
+				currentDeltaMeasure = 0;
 
 			//delay just like we were actually sampling
 			delay(SPEED_SENSOR_SAMPLE_DELAY_MS);
@@ -227,9 +227,15 @@ void EnterSpeedSensorLoop() {
 			//Do 1/2 of the potReadMax of 1024 to create a centerpoint of +/- adjustment
 			//long speedMultiplier = FULL_SPEED_DELTA_PER_SAMPLE * (currentPotMeasure / 255.);
 
-			//Do the speed multiplier
-			speed = currentDeltaMeasure * ((currentPotMeasure * 5) / 255.);
-
+			if (modeSwitchState == HIGH)
+			{
+				//If in auto, Do the speed multiplier
+				speed = currentDeltaMeasure * ((currentPotMeasure * 5) / 255.);
+			}
+			else {
+				//manually set with the dial above
+				speed = (currentDeltaMeasure - SPEED_MULTIPLIER_RESET_DEFAULT) * 30;
+			}
 			if (speed > 254) {
 				speed = 254;
 			}
