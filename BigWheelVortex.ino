@@ -9,7 +9,7 @@
 #include <FastLED.h>
 
 #define LED_PIN     5
-#define NUM_LEDS    30
+#define NUM_LEDS    300
 #define STANDBY_BRIGHTNESS  64
 #define NOT_MOVING_BRIGHTNESS  128
 #define FULL_BRIGHTNESS  255
@@ -18,12 +18,24 @@
 #define COLOR_ORDER GRB
 CRGB leds[NUM_LEDS];
 
-#define RANGEFINDER_SAMPLECOUNT  2
-#define DELTA_AVERAGE_SAMPLECOUNT  2
 #define POT_SAMPLECOUNT  3
 #define UPDATES_PER_SECOND 100
 #define SLOW_GLOW_SPEED 20
-#define SPEED_SENSOR_LOOP_DELAY_MS 1
+
+//ROTARY ENCODER
+#define rotaryOutputA 2
+#define rotaryOutputB 3
+int rotaryCounter = 0;
+int rotaryaState;
+int rotaryaLastState;
+
+//ROTARY POTS
+volatile boolean potTurnDetected;
+volatile boolean up;
+
+const int potPinCLK = 2;                   // Used for generating interrupts using CLK signal
+const int potPinDT = 3;                    // Used for reading DT signal
+const int potPinSW = 4;                    // Used for the push button switch
 
 CRGBPalette16 currentPalette;
 TBlendType    currentBlending;
@@ -31,43 +43,68 @@ TBlendType    currentBlending;
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
-#define IS_LEDCONTROLLER  0
+#define IS_LEDCONTROLLER  1
 
-int potPin = A0;  //Declare potPin to be analog pin A0
 int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
 int speedValue; // Use this variable for writing to LED
 
-int modeSwitchPin = 2;  // the number of the mode input pin
+int modeSwitchPin = 7;  // the number of the mode input pin
 
 bool DIRECTION_IS_TOWARDS = true;
 
-float MAX_POSSIBLE_SPEED_DISTANCE_DELTA_MM = 1100;
+float FULL_ROTATION_DELTA = 600;
+float FULL_SPEED_DELTA_PER_SAMPLE = 300;
+float SPEED_MULTIPLIER_RESET_DEFAULT = 74;
+#define SPEED_SENSOR_SAMPLE_DELAY_MS 250
 
-Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+#include <RotaryEncoder.h>
+
+// Setup a RoraryEncoder for pins A2 and A3:
+RotaryEncoder encoder(A2, A3);
 
 
 void setup() {
 	delay(3000); // power-up safety delay
 	
+	//The same pins for both units
+	pinMode(modeSwitchPin, INPUT_PULLUP); //set the mode switch
+
+	pinMode(potPinCLK, INPUT);
+	pinMode(potPinDT, INPUT);
+	pinMode(potPinSW, INPUT);
+	attachInterrupt(0, isr, FALLING);   // interrupt 0 is always connected to pin 2 on Arduino UNO
+
+	//Serial.begin(57600);
+	//Serial.println("SimplePollRotator example for the RotaryEncoder library.");
+
+
 	if (IS_LEDCONTROLLER) {
 		FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
 		FastLED.setBrightness(STANDBY_BRIGHTNESS);
 
 		SetupBlackAndWhiteStripedPalette();
 		currentBlending = LINEARBLEND;
-		pinMode(modeSwitchPin, INPUT_PULLUP); //set the mode switch
 
 		Wire.begin(9);
 		// Attach a function to trigger when something is received.
 		Wire.onReceive(receiveEvent);
 	}
 	else {
-		lox.begin();
+
+
+		// You may have to modify the next 2 lines if using other pins than A2 and A3
+		PCICR |= (1 << PCIE1);    // This enables Pin Change Interrupt 1 that covers the Analog input pins or Port C.
+		PCMSK1 |= (1 << PCINT10) | (1 << PCINT11);  // This enables the interrupt for pin 2 and 3 of Port C.
+
 		Wire.begin();
-		pinMode(potPin, INPUT);  //set potPin to be an input
 	}
 }
 
+// The Interrupt Service Routine for Pin Change Interrupt 1
+// This routine will only be called on any signal change on A2 and A3: exactly where we need to check.
+ISR(PCINT1_vect) {
+	encoder.tick(); // just call tick() to check the state.
+}
 
 void loop()
 {
@@ -81,6 +118,7 @@ void loop()
 	}
 }
 
+
 void EnterSpeedSensorLoop() {
 	while (1) {
 		//static int16_t direction = 1;
@@ -88,131 +126,76 @@ void EnterSpeedSensorLoop() {
 		static int16_t speed = 0;
 		static int16_t lastSpeed = 0;
 		static bool manualMode = false;
-		VL53L0X_RangingMeasurementData_t measure;
+		static int lastPos = 0;
+		//VL53L0X_RangingMeasurementData_t measure;
 
-		long goodRangeSamples = 0;
+		//long goodRangeSamples = 0;
 
 		float currentDeltaMeasure = 0;
 		long currentDeltaTotal = 0;
 		long goodDeltaSamples = 0;
 
-		static bool goodChangeDetected = false;
 		static bool potChangeDetected = false;
 
-		goodChangeDetected = false;
+		static long virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;    // without STATIC it does not count correctly!!!
 
-		long potReadValue = 0;
-		long currentPotMeasure = 0;
-		long goodPotSamples = 0;
-		for (size_t i = 0; i < POT_SAMPLECOUNT; i++)
-		{
-			potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-
-			currentPotMeasure += ((255. / 1023.) * potReadValue) + 1;
-			goodPotSamples++;
+		if (!(digitalRead(potPinSW))) {      // check if pushbutton is pressed
+			virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;              // if YES, then reset counter to ZERO
+			//Serial.print("Reset = ");      // Using the word RESET instead of COUNT here to find out a buggy encoder
+			//Serial.println(virtualPosition);
 		}
 
-		if (goodPotSamples > 0) {
-			currentPotMeasure = currentPotMeasure / goodPotSamples;
+		//Actually up is down for some reason.  Reverse the incrementer
+		if (potTurnDetected) {		    // do this only if rotation was detected
+			if (up)
+				virtualPosition--;
+			else
+				virtualPosition++;
+			potTurnDetected = false;          // do NOT repeat IF loop until new rotation detected
+			//Serial.print("Count = ");
+			//Serial.println(virtualPosition);
 		}
+		if (virtualPosition > 255)
+			virtualPosition = 255;
+		if (virtualPosition < 0)
+			virtualPosition = 0;
 
-		if (manualMode == false)
+		float currentPotMeasure = virtualPosition;
+
+		int modeSwitchState = digitalRead(modeSwitchPin);
+
+		if (modeSwitchState == HIGH)
 		{
 			//############################################################
 			//Using the TIME OF FLIGHT Sensor
 			//============================================================
 			//-----------------------------------------------
 			//LOOP TO GET SAMPLES FROM RANGE FINDER
-			int16_t lastMeasure = 0;
-			for (size_t i = 0; i < DELTA_AVERAGE_SAMPLECOUNT; i++)
-			{
-				//reset our count of good range samples of each bigger loop
-				uint16_t lastSample = 0;
-				uint16_t thisSample = 0;
-				long currentMeasure = 0;
-				goodRangeSamples = 0;
-				//-----------------------------------------------
-				//LOOP TO GET SAMPLES FROM RANGE FINDER
-				for (size_t x = 0; x < RANGEFINDER_SAMPLECOUNT; x++)
-				{
-					//need at least two consecutive in the same direction, 
-					lox.rangingTest(&measure, true);
-					if (measure.RangeStatus != 4)
-					{
-						thisSample = measure.RangeMilliMeter;
 
-						//Only measure getting closer....
-						//also allow last sample to be zero.
-						if (lastSample == 0)
-						{
-							if (thisSample != 0)
-							{
-								lastSample = thisSample;
-								currentMeasure += thisSample;
-								goodRangeSamples++;
-							}
-						}
-						else
-						{
-							if ((DIRECTION_IS_TOWARDS && lastSample >= thisSample - 40) ||
-								lastSample <= thisSample +40)
-							{
-								currentMeasure += thisSample;
-								goodRangeSamples++;
-							}
-							else
-							{
-								//throw this loop away;
-								goodRangeSamples = 0;
-								break;
-							}
-						}
+			int newPos1 = encoder.getPosition();
+			delay(SPEED_SENSOR_SAMPLE_DELAY_MS);
+			int newPos2 = encoder.getPosition();
+			if (newPos1 != newPos2) {
+				//Serial.print(newPos1);
+				//Serial.println();
 
-						lastSample = thisSample;
-					}
-				}
 				//END OF RANGEFINDER_SAMPLECOUNT LOOP
 				//-----------------------------------------------
 				//Test the samples and average them
-				if (goodRangeSamples > 0)
+				if (DIRECTION_IS_TOWARDS)
 				{
-					currentMeasure = currentMeasure / goodRangeSamples;
-
-					//We need at least one pass to make a diff.
-					if (lastMeasure != 0)
-					{
-						if (currentMeasure < 5)
-						{
-							//ignore small noise
-						}
-						else
-						{
-							if (DIRECTION_IS_TOWARDS)
-							{
-								currentDeltaTotal += lastMeasure - currentMeasure;
-							}
-							else
-							{
-								currentDeltaTotal += currentMeasure - lastMeasure;
-							}
-							goodDeltaSamples++;
-						}
-					}
-
-					lastMeasure = currentMeasure;
+					currentDeltaMeasure = newPos2 - newPos1;
 				}
-				//-----------------------------------------------
+				else
+				{
+					currentDeltaMeasure = newPos1 - newPos2;
+				}
+				lastPos = newPos2;
 			}
-			//END OF DELTA_AVERAGE_SAMPLECOUNT LOOP
-			//============================================================
-			if (goodDeltaSamples > 0)
-			{
-				currentDeltaMeasure = currentDeltaTotal / goodDeltaSamples;
-				goodChangeDetected = true;
-
-				//Since the TOWARDS direct gives negative deltas...
+			else {
+				//no diff.  Speed is zero.
+				currentDeltaMeasure = 0;
 			}
-			//############################################################
 		}
 		else
 		{
@@ -220,17 +203,18 @@ void EnterSpeedSensorLoop() {
 			//For manually testing the speed using the dial
 			currentDeltaMeasure = currentPotMeasure;
 
+			//delay just like we were actually sampling
+			delay(SPEED_SENSOR_SAMPLE_DELAY_MS);
+
 			if (currentDeltaMeasure < 5) {
 				//ignore small noise
 				currentDeltaMeasure = 0;
 			}
-			//always when manual
-			goodChangeDetected = true;
 		}
 
 		//--------------------------------------
 
-		if (goodChangeDetected && lastDeltaMeasure != currentDeltaMeasure) {
+		if (lastDeltaMeasure != currentDeltaMeasure) {
 
 			//ignore bacwards
 			if (currentDeltaMeasure < 0)
@@ -241,10 +225,16 @@ void EnterSpeedSensorLoop() {
 			//MAX Speed is determined is a closing distance of something like 300mm
 			//determined by the POT value
 			//Do 1/2 of the potReadMax of 1024 to create a centerpoint of +/- adjustment
-			long maxSpeedDistanceDelta = MAX_POSSIBLE_SPEED_DISTANCE_DELTA_MM * (potReadValue / 512.);
-			speed = 254 * (currentDeltaMeasure / maxSpeedDistanceDelta);
+			//long speedMultiplier = FULL_SPEED_DELTA_PER_SAMPLE * (currentPotMeasure / 255.);
+
+			//Do the speed multiplier
+			speed = currentDeltaMeasure * ((currentPotMeasure * 5) / 255.);
+
 			if (speed > 254) {
 				speed = 254;
+			}
+			if (speed < 0) {
+				speed = 0;
 			}
 			//send the speed value over I2C
 			Wire.beginTransmission(9); // transmit to device #9
@@ -254,10 +244,18 @@ void EnterSpeedSensorLoop() {
 			//only remember if we got a good change detection
 			lastDeltaMeasure = currentDeltaMeasure;
 		}
-
-		delay(SPEED_SENSOR_LOOP_DELAY_MS);
 	}
 }
+
+
+void isr() {                    // Interrupt service routine is executed when a HIGH to LOW transition is detected on CLK
+	if (digitalRead(potPinCLK))
+		up = digitalRead(potPinDT);
+	else
+		up = !digitalRead(potPinDT);
+	potTurnDetected = true;
+}
+
 
 void EnterLEDLoop() {
 	int modeSwitchState = 0;
@@ -303,9 +301,35 @@ void EnterLEDLoop() {
 			currentPalette = RainbowColors_p;
 			currentBlending = LINEARBLEND;
 
-			potReadValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-			if (potReadValue > 2) {
-				standbyGlowSpeed = ((255. / 1023.) * potReadValue) + 1;
+
+			static bool potChangeDetected = false;
+			static long virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;    // without STATIC it does not count correctly!!!
+
+			if (!(digitalRead(potPinSW))) {      // check if pushbutton is pressed
+				virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;              // if YES, then reset counter to ZERO
+				//Serial.print("Reset = ");      // Using the word RESET instead of COUNT here to find out a buggy encoder
+				//Serial.println(virtualPosition);
+			}
+
+			//Actually up is down for some reason.  Reverse the incrementer
+			if (potTurnDetected) {		    // do this only if rotation was detected
+				if (up)
+					virtualPosition = virtualPosition - 4;
+				else
+					virtualPosition = virtualPosition + 4;
+
+				if (virtualPosition > 255)
+					virtualPosition = 255;
+				if (virtualPosition < 0)
+					virtualPosition = 0;
+
+				potTurnDetected = false;          // do NOT repeat IF loop until new rotation detected
+				//Serial.print("Count = ");
+				//Serial.println(virtualPosition);
+			}
+
+			if (virtualPosition > 2) {
+				standbyGlowSpeed = virtualPosition + 1;
 				if (standbyGlowSpeed > 255)
 					standbyGlowSpeed = 255;
 				else if (standbyGlowSpeed < 1)
@@ -314,6 +338,7 @@ void EnterLEDLoop() {
 			else {
 				standbyGlowSpeed = SLOW_GLOW_SPEED;
 			}
+
 			localSpeedValue = standbyGlowSpeed;
 		}
 
