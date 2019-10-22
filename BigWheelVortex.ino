@@ -43,7 +43,11 @@ TBlendType    currentBlending;
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
+//######################################################################
+
 #define IS_LEDCONTROLLER  0
+
+//######################################################################
 
 int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
 int speedValue; // Use this variable for writing to LED
@@ -54,7 +58,7 @@ bool DIRECTION_IS_TOWARDS = false;
 
 float FULL_ROTATION_DELTA = 600;
 float FULL_SPEED_DELTA_PER_SAMPLE = 300;
-float SPEED_MULTIPLIER_RESET_DEFAULT = 74;
+float SPEED_MULTIPLIER_RESET_DEFAULT = 100;
 #define SPEED_SENSOR_SAMPLE_DELAY_MS 250
 
 #include <RotaryEncoder.h>
@@ -206,7 +210,7 @@ void EnterSpeedSensorLoop() {
 			//delay just like we were actually sampling
 			delay(SPEED_SENSOR_SAMPLE_DELAY_MS);
 
-			if (currentDeltaMeasure < 5) {
+			if (currentDeltaMeasure < 6) {
 				//ignore small noise
 				currentDeltaMeasure = 0;
 			}
@@ -275,7 +279,7 @@ void EnterLEDLoop() {
 		localSpeedValue = speedValue;
 		modeSwitchState = digitalRead(modeSwitchPin);
 		previousModeSwitchPos = modeSwitchState;
-		startIndex = startIndex + 1; /* motion speed */
+		startIndex = startIndex - 1; /* motion speed */
 
 		if (modeSwitchState == HIGH) {
 			//-------   SPIN!!!  -------------------
@@ -303,7 +307,7 @@ void EnterLEDLoop() {
 		else {
 			//-------   STANDBY  -------------------
 			FastLED.setBrightness(STANDBY_BRIGHTNESS);
-			startIndex = startIndex + 1; /* motion speed */
+			startIndex = startIndex - 1; /* motion speed */
 			currentPalette = RainbowColors_p;
 			currentBlending = LINEARBLEND;
 
