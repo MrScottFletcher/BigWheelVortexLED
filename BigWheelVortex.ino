@@ -1,71 +1,41 @@
-// Visual Micro is in vMicro>General>Tutorial Mode
-// 
 /*
     Name:       BigWheelVortex.ino
     Created:	9/23/2019 10:15:57 PM
-    Author:     DESKTOP-62IO2EV\scott
+    Author:     Scott Fletcher
+	With FULL credit to the internet for various sample, tutorials, and the like.
 */
 
-// Define User Types below here or use a .h file
-//
-
-
-// Define Function Prototypes that use User Types below here or use a .h file
-//
-
-
-// Define Functions below here or use other .ino or cpp files
-//
-
-
-//#include <vl53l0x_types.h>
-//#include <vl53l0x_tuning.h>
-//#include <vl53l0x_platform_log.h>
-//#include <vl53l0x_platform.h>
-//#include <vl53l0x_interrupt_threshold_settings.h>
-//#include <vl53l0x_i2c_platform.h>
-//#include <vl53l0x_device.h>
-//#include <vl53l0x_def.h>
-//#include <vl53l0x_api_strings.h>
-//#include <vl53l0x_api_ranging.h>
-//#include <vl53l0x_api_core.h>
-//#include <vl53l0x_api_calibration.h>
-//#include <vl53l0x_api.h>
 #include <Adafruit_VL53L0X.h>
 #include <FastLED.h>
 
 #define LED_PIN     5
-#define NUM_LEDS    30
+#define NUM_LEDS    300
 #define STANDBY_BRIGHTNESS  64
-#define NOT_MOVING_BRIGHTNESS  128
+#define NOT_MOVING_BRIGHTNESS  64
 #define FULL_BRIGHTNESS  255
 //#define BRIGHTNESS  128
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB
 CRGB leds[NUM_LEDS];
 
-#define SAMPLECOUNT  3
+#define POT_SAMPLECOUNT  3
 #define UPDATES_PER_SECOND 100
 #define SLOW_GLOW_SPEED 20
 
-// This example shows several ways to set up and use 'palettes' of colors
-// with FastLED.
-//
-// These compact palettes provide an easy way to re-colorize your
-// animation on the fly, quickly, easily, and with low overhead.
-//
-// USING palettes is MUCH simpler in practice than in theory, so first just
-// run this sketch, and watch the pretty lights as you then read through
-// the code.  Although this sketch has eight (or more) different color schemes,
-// the entire sketch compiles down to about 6.5K on AVR.
-//
-// FastLED provides a few pre-configured color palettes, and makes it
-// extremely easy to make up your own color schemes with palettes.
-//
-// Some notes on the more abstract 'theory and practice' of
-// FastLED compact palettes are at the bottom of this file.
+//ROTARY ENCODER
+#define rotaryOutputA 2
+#define rotaryOutputB 3
+int rotaryCounter = 0;
+int rotaryaState;
+int rotaryaLastState;
 
+//ROTARY POTS
+volatile boolean potTurnDetected;
+volatile boolean up;
 
+const int potPinCLK = 2;                   // Used for generating interrupts using CLK signal
+const int potPinDT = 3;                    // Used for reading DT signal
+const int potPinSW = 4;                    // Used for the push button switch
 
 CRGBPalette16 currentPalette;
 TBlendType    currentBlending;
@@ -73,318 +43,337 @@ TBlendType    currentBlending;
 extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
-//################################################################################################
-// TIME OF FLIGHT DEMO
+//######################################################################
 
-//Adafruit_VL53L0X lox = Adafruit_VL53L0X();
-//
-//void setup() {
-//	Serial.begin(115200);
-//
-//	// wait until serial port opens for native USB devices
-//	while (!Serial) {
-//		delay(1);
-//	}
-//
-//	Serial.println("Adafruit VL53L0X test");
-//	if (!lox.begin()) {
-//		Serial.println(F("Failed to boot VL53L0X"));
-//		while (1);
-//	}
-//	// power 
-//	Serial.println(F("VL53L0X API Simple Ranging example\n\n"));
-//}
-//
-//
-//void loop() {
-//	VL53L0X_RangingMeasurementData_t measure;
-//
-//	Serial.print("Reading a measurement... ");
-//	lox.rangingTest(&measure, false); // pass in 'true' to get debug data printout!
-//
-//	if (measure.RangeStatus != 4) {  // phase failures have incorrect data
-//		Serial.print("Distance (mm): "); Serial.println(measure.RangeMilliMeter);
-//	}
-//	else {
-//		Serial.println(" out of range ");
-//	}
-//
-//	delay(100);
-//}
+#define IS_LEDCONTROLLER  0
 
-//################################################################################################
-// FAST LED DEMO -
-//
-//void setup() {
-//	delay(3000); // power-up safety delay
-//	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-//	FastLED.setBrightness(BRIGHTNESS);
-//
-//	currentPalette = RainbowColors_p;
-//	currentBlending = LINEARBLEND;
-//}
-//
-//
-//void loop()
-//{
-//	ChangePalettePeriodically();
-//
-//	static uint8_t startIndex = 0;
-//	startIndex = startIndex + 1; /* motion speed */
-//
-//	FillLEDsFromPaletteColors(startIndex);
-//
-//	FastLED.show();
-//	FastLED.delay(1000 / UPDATES_PER_SECOND);
-//}
-//###################################################################################
-//LED ADJUST WITH POT
-//int potPin = A0;  //Declare potPin to be analog pin A0
-//int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
-//int readValue;  // Use this variable to read Potentiometer
-//int writeValue; // Use this variable for writing to LED
-//
-//void setup() {
-//	pinMode(potPin, INPUT);  //set potPin to be an input
-//	pinMode(LEDPin, OUTPUT); //set LEDPin to be an OUTPUT
-//	Serial.begin(9600);      // turn on Serial Port
-//}
-//
-//void loop() {
-//
-//	readValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-//	writeValue = (255. / 1023.) * readValue; //Calculate Write Value for LED
-//	analogWrite(LEDPin, writeValue);      //Write to the LED
-//	Serial.print("You are writing a value of ");  //for debugging print your values
-//	Serial.println(writeValue);
-//
-//}
-//################################################################################################
-// FAST LED ADJUSTABLE -
-//
-int potPin = A0;  //Declare potPin to be analog pin A0
+//######################################################################
+
 int LEDPin = 9;  // Declare LEDPin to be arduino pin 9
-int readValue;  // Use this variable to read Potentiometer
-int writeValue; // Use this variable for writing to LED
+int speedValue; // Use this variable for writing to LED
 
-int switchPin = 2;         // the number of the input pin
-//int outPin = 13;       // the number of the output pin
+int modeSwitchPin = 7;  // the number of the mode input pin
 
-int state = HIGH;      // the current state of the output pin
-int reading;           // the current reading from the input pin
-int previous = LOW;    // the previous reading from the input pin
+bool DIRECTION_IS_TOWARDS = false;
 
-// the follow variables are long's because the time, measured in miliseconds,
-// will quickly become a bigger number than can be stored in an int.
-long time = 0;         // the last time the output pin was toggled
-long debounce = 500;   // the debounce time, increase if the output flickers
+float FULL_ROTATION_DELTA = 600;
+float FULL_SPEED_DELTA_PER_SAMPLE = 300;
+float SPEED_MULTIPLIER_RESET_DEFAULT = 100;
+#define SPEED_SENSOR_SAMPLE_DELAY_MS 250
+
+#include <RotaryEncoder.h>
+
+// Setup a RoraryEncoder for pins A2 and A3:
+RotaryEncoder encoder(A2, A3);
+
 
 void setup() {
 	delay(3000); // power-up safety delay
-	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-	FastLED.setBrightness(STANDBY_BRIGHTNESS);
+	
+	//The same pins for both units
+	pinMode(modeSwitchPin, INPUT_PULLUP); //set the mode switch
 
-	SetupBlackAndWhiteStripedPalette();
-	//currentPalette = RainbowColors_p;
-	currentBlending = LINEARBLEND;
+	pinMode(potPinCLK, INPUT);
+	pinMode(potPinDT, INPUT);
+	pinMode(potPinSW, INPUT);
+	attachInterrupt(0, isr, FALLING);   // interrupt 0 is always connected to pin 2 on Arduino UNO
 
-	pinMode(potPin, INPUT);  //set potPin to be an input
-	pinMode(LEDPin, OUTPUT); //set LEDPin to be an OUTPUT
-	Serial.begin(9600);      // turn on Serial Port
+	//Serial.begin(57600);
+	//Serial.println("SimplePollRotator example for the RotaryEncoder library.");
 
-	pinMode(switchPin, INPUT_PULLUP); //set the mode switch
+
+	if (IS_LEDCONTROLLER) {
+		FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+		FastLED.setBrightness(STANDBY_BRIGHTNESS);
+
+		SetupBlackAndWhiteStripedPalette();
+		currentBlending = LINEARBLEND;
+
+		Wire.begin(9);
+		// Attach a function to trigger when something is received.
+		Wire.onReceive(receiveEvent);
+	}
+	else {
+
+
+		// You may have to modify the next 2 lines if using other pins than A2 and A3
+		PCICR |= (1 << PCIE1);    // This enables Pin Change Interrupt 1 that covers the Analog input pins or Port C.
+		PCMSK1 |= (1 << PCINT10) | (1 << PCINT11);  // This enables the interrupt for pin 2 and 3 of Port C.
+
+		Wire.begin();
+	}
 }
 
+// The Interrupt Service Routine for Pin Change Interrupt 1
+// This routine will only be called on any signal change on A2 and A3: exactly where we need to check.
+ISR(PCINT1_vect) {
+	encoder.tick(); // just call tick() to check the state.
+}
 
 void loop()
 {
-	static uint8_t startIndex = 0;
-	//ChangePalettePeriodically();
+	if (!IS_LEDCONTROLLER) {
+		//Get the speed rating and communicate to the LED Controller
+		EnterSpeedSensorLoop();
+	}
+	else {
+		//Handle the speed value and control the LEDs accordingly
+		EnterLEDLoop();
+	}
+}
 
-	reading = digitalRead(switchPin);
-	startIndex = startIndex + 1; /* motion speed */
 
-	//For pushbutton logic
-	// if the input just went from LOW and HIGH and we've waited long enough
-	// to ignore any noise on the circuit, toggle the output pin and remember
-	// the time
-	//if (reading == HIGH && previous == LOW && millis() - time > debounce) {
-	//	if (state == HIGH)
-	//		state = LOW;
-	//	else
-	//		state = HIGH;
+void EnterSpeedSensorLoop() {
+	while (1) {
+		//static int16_t direction = 1;
+		static int16_t lastDeltaMeasure = 0;
+		static int16_t speed = 0;
+		static int16_t lastSpeed = 0;
+		static bool manualMode = false;
+		static int lastPos = 0;
+		//VL53L0X_RangingMeasurementData_t measure;
 
-	//	time = millis();
-	//}
+		//long goodRangeSamples = 0;
 
-	state = reading;
-	previous = reading;
+		float currentDeltaMeasure = 0;
+		long currentDeltaTotal = 0;
+		long goodDeltaSamples = 0;
 
-	if (state == HIGH) {
-		//-------   SPIN!!!  -------------------
-		readValue = analogRead(potPin);  //Read the voltage on the Potentiometer
-		if (readValue > 2) {
-			FastLED.setBrightness(FULL_BRIGHTNESS);
-			writeValue = ((255. / 1023.) * readValue) + 1;
-			if (writeValue > 200) {
-				// SUPER FAST SPIN
-				currentPalette = RainbowStripeColors_p;
-				currentBlending = LINEARBLEND;
+		static bool potChangeDetected = false;
+
+		static long virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;    // without STATIC it does not count correctly!!!
+
+		if (!(digitalRead(potPinSW))) {      // check if pushbutton is pressed
+			virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;              // if YES, then reset counter to ZERO
+			//Serial.print("Reset = ");      // Using the word RESET instead of COUNT here to find out a buggy encoder
+			//Serial.println(virtualPosition);
+		}
+
+		//Actually up is down for some reason.  Reverse the incrementer
+		if (potTurnDetected) {		    // do this only if rotation was detected
+			if (up)
+				virtualPosition--;
+			else
+				virtualPosition++;
+			potTurnDetected = false;          // do NOT repeat IF loop until new rotation detected
+			//Serial.print("Count = ");
+			//Serial.println(virtualPosition);
+		}
+		if (virtualPosition > 255)
+			virtualPosition = 255;
+		if (virtualPosition < 0)
+			virtualPosition = 0;
+
+		float currentPotMeasure = virtualPosition;
+
+		int modeSwitchState = digitalRead(modeSwitchPin);
+
+		if (modeSwitchState == HIGH)
+		{
+			//############################################################
+			//Using the rotary encoder
+			//============================================================
+
+			int newPos1 = encoder.getPosition();
+			delay(SPEED_SENSOR_SAMPLE_DELAY_MS);
+			int newPos2 = encoder.getPosition();
+			if (newPos1 != newPos2) {
+				//Serial.print(newPos1);
+				//Serial.println();
+
+				//END OF RANGEFINDER_SAMPLECOUNT LOOP
+				//-----------------------------------------------
+				//Test the samples and average them
+				if (DIRECTION_IS_TOWARDS)
+				{
+					currentDeltaMeasure = newPos2 - newPos1;
+				}
+				else
+				{
+					currentDeltaMeasure = newPos1 - newPos2;
+				}
+				lastPos = newPos2;
 			}
 			else {
-				//REGULAR SPIN
-				SetupBlackAndWhiteStripedPalette();
+				//no diff.  Speed is zero.
+				currentDeltaMeasure = 0;
+			}
+		}
+		else
+		{
+			//--------------------------------------
+			//For manually testing the speed using the dial
+			currentDeltaMeasure = currentPotMeasure;
+			if(currentDeltaMeasure < 0)
+				currentDeltaMeasure = 0;
+
+			//delay just like we were actually sampling
+			delay(SPEED_SENSOR_SAMPLE_DELAY_MS);
+
+			if (currentDeltaMeasure < 6) {
+				//ignore small noise
+				currentDeltaMeasure = 0;
+			}
+		}
+
+		//--------------------------------------
+
+		if (lastDeltaMeasure != currentDeltaMeasure) {
+
+			//ignore bacwards
+			if (currentDeltaMeasure < 0)
+				currentDeltaMeasure = 0;
+
+			//send the message
+			//Speed is 0-255
+			//MAX Speed is determined is a closing distance of something like 300mm
+			//determined by the POT value
+			//Do 1/2 of the potReadMax of 1024 to create a centerpoint of +/- adjustment
+			//long speedMultiplier = FULL_SPEED_DELTA_PER_SAMPLE * (currentPotMeasure / 255.);
+
+			if (modeSwitchState == HIGH)
+			{
+				//If in auto, Do the speed multiplier
+				speed = currentDeltaMeasure * ((currentPotMeasure * 5) / 255.);
+			}
+			else {
+				//manually set with the dial above
+				speed = (currentDeltaMeasure - SPEED_MULTIPLIER_RESET_DEFAULT) * 30;
+			}
+			if (speed > 254) {
+				speed = 254;
+			}
+			if (speed < 0) {
+				speed = 0;
+			}
+			//send the speed value over I2C
+			Wire.beginTransmission(9); // transmit to device #9
+			Wire.write(speed);              // sends x 
+			Wire.endTransmission();    // stop transmitting
+
+			//only remember if we got a good change detection
+			lastDeltaMeasure = currentDeltaMeasure;
+		}
+	}
+}
+
+
+void isr() {                    // Interrupt service routine is executed when a HIGH to LOW transition is detected on CLK
+	if (digitalRead(potPinCLK))
+		up = digitalRead(potPinDT);
+	else
+		up = !digitalRead(potPinDT);
+	potTurnDetected = true;
+}
+
+
+void EnterLEDLoop() {
+	int modeSwitchState = 0;
+	int previousModeSwitchPos = 0;
+	while (1) {
+		static uint8_t startIndex = 0;
+		static uint8_t localSpeedValue = 0;
+		static uint8_t standbyGlowSpeed = SLOW_GLOW_SPEED;
+		long potReadValue = 0;
+
+		localSpeedValue = speedValue;
+		modeSwitchState = digitalRead(modeSwitchPin);
+		previousModeSwitchPos = modeSwitchState;
+		startIndex = startIndex - 1; /* motion speed */
+
+		if (modeSwitchState == HIGH) {
+			//-------   SPIN!!!  -------------------
+			if (localSpeedValue > 2) {
+				FastLED.setBrightness(FULL_BRIGHTNESS);
+				if (localSpeedValue > 200) {
+					// SUPER FAST SPIN
+					currentPalette = RainbowStripeColors_p;
+					currentBlending = LINEARBLEND;
+				}
+				else {
+					//REGULAR SPIN
+					SetupBlackAndWhiteStripedPalette();
+					currentBlending = LINEARBLEND;
+				}
+			}
+			else {
+				//NOT MOVING Glow
+				FastLED.setBrightness(NOT_MOVING_BRIGHTNESS);
+				currentPalette = PartyColors_p;
 				currentBlending = LINEARBLEND;
+				localSpeedValue = SLOW_GLOW_SPEED;
 			}
 		}
 		else {
-			//NOT MOVING Glow
-			FastLED.setBrightness(NOT_MOVING_BRIGHTNESS);
-			currentPalette = PartyColors_p;
+			//-------   STANDBY  -------------------
+			FastLED.setBrightness(STANDBY_BRIGHTNESS);
+			startIndex = startIndex - 1; /* motion speed */
+			currentPalette = RainbowColors_p;
 			currentBlending = LINEARBLEND;
-			writeValue = SLOW_GLOW_SPEED;
+
+
+			static bool potChangeDetected = false;
+			static long virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;    // without STATIC it does not count correctly!!!
+
+			if (!(digitalRead(potPinSW))) {      // check if pushbutton is pressed
+				virtualPosition = SPEED_MULTIPLIER_RESET_DEFAULT;              // if YES, then reset counter to ZERO
+				//Serial.print("Reset = ");      // Using the word RESET instead of COUNT here to find out a buggy encoder
+				//Serial.println(virtualPosition);
+			}
+
+			//Actually up is down for some reason.  Reverse the incrementer
+			if (potTurnDetected) {		    // do this only if rotation was detected
+				if (up)
+					virtualPosition = virtualPosition - 4;
+				else
+					virtualPosition = virtualPosition + 4;
+
+				if (virtualPosition > 255)
+					virtualPosition = 255;
+				if (virtualPosition < 0)
+					virtualPosition = 0;
+
+				potTurnDetected = false;          // do NOT repeat IF loop until new rotation detected
+				//Serial.print("Count = ");
+				//Serial.println(virtualPosition);
+			}
+
+			if (virtualPosition > 2) {
+				standbyGlowSpeed = virtualPosition + 1;
+				if (standbyGlowSpeed > 255)
+					standbyGlowSpeed = 255;
+				else if (standbyGlowSpeed < 1)
+					standbyGlowSpeed = 1;
+			}
+			else {
+				standbyGlowSpeed = SLOW_GLOW_SPEED;
+			}
+
+			localSpeedValue = standbyGlowSpeed;
+		}
+
+		FillLEDsFromPaletteColors(startIndex);
+		FastLED.show();
+		FastLED.delay(1000 / localSpeedValue);
+	}
+}
+
+void receiveEvent(int bytes) {
+	static uint8_t localReadSpeedValue = 0; 
+	// read one character from the I2C
+	localReadSpeedValue = Wire.read();
+	if (localReadSpeedValue == 0)
+		localReadSpeedValue = 1;
+	else {
+		if (localReadSpeedValue > 254) {
+			localReadSpeedValue = 254;
 		}
 	}
-	else {
-		//-------   STANDBY  -------------------
-		FastLED.setBrightness(STANDBY_BRIGHTNESS);
-		startIndex = startIndex + 1; /* motion speed */
-		currentPalette = RainbowColors_p;
-		currentBlending = LINEARBLEND;
-		writeValue = SLOW_GLOW_SPEED;
-	}
-
-	FillLEDsFromPaletteColors(startIndex);
-	FastLED.show();
-	FastLED.delay(1000 / writeValue);
+	speedValue = localReadSpeedValue;    
 }
-//###################################################################################
-
-//Adafruit_VL53L0X lox = Adafruit_VL53L0X();
-//
-//void setup() {
-//	delay(3000); // power-up safety delay
-//	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-//	FastLED.setBrightness(BRIGHTNESS);
-//
-//	currentPalette = RainbowColors_p;
-//	currentBlending = LINEARBLEND;
-//
-//	lox.begin();
-//}
-//
-//
-//void loop()
-//{
-//	ChangePalettePeriodically();
-//
-//	static uint8_t startIndex = 0;
-//	static uint8_t currentSpeed = 100;
-//
-//	startIndex = startIndex + 1; /* motion speed */
-//
-//	VL53L0X_RangingMeasurementData_t measure;
-//	if(startIndex % 5 == 0)
-//		lox.rangingTest(&measure, false);
-//
-//	FillLEDsFromPaletteColors(startIndex);
-//
-//	FastLED.show();
-//	FastLED.delay(1000 / UPDATES_PER_SECOND);
-//}
-
-//################################################################################################
-
-//Adafruit_VL53L0X lox = Adafruit_VL53L0X();
-//
-//void setup() {
-//	delay(3000); // power-up safety delay
-//	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-//	FastLED.setBrightness(BRIGHTNESS);
-//
-//	currentPalette = RainbowColors_p;
-//	currentBlending = LINEARBLEND;
-//
-//	lox.begin();
-//
-//		//Serial.begin(115200);
-//	
-//		//// wait until serial port opens for native USB devices
-//		//while (!Serial) {
-//		//	delay(1);
-//		//}
-//	
-//		//Serial.println("Adafruit VL53L0X test");
-//		//	Serial.println(F("Failed to boot VL53L0X"));
-//		//	while (1);
-//		//}
-//		// power 
-//		//if (!lox.begin()) {
-//		//Serial.println(F("VL53L0X API Simple Ranging example\n\n"));
-//
-//	SetupBlackAndWhiteStripedPalette();
-//	currentBlending = LINEARBLEND;
-//
-//}
-//
-//
-//void loop()
-//{
-//	//ChangePalettePeriodically();
-//
-//	static int16_t direction = 1;
-//
-//	static uint8_t startIndex = 100000;
-//
-//	static int16_t deltaMeasure = 0;
-//	static int16_t lastMeasure = 0;
-//	static int16_t currentMeasure = 0;
-//	static int16_t goodSamples = 0;
-//
-//	VL53L0X_RangingMeasurementData_t measure;
-//
-//	if (deltaMeasure > 0) {
-//		startIndex = startIndex + direction; /* motion speed */
-//	}
-//
-//	currentMeasure = 0;
-//	goodSamples = 0;
-//
-//	for (size_t i = 0; i < SAMPLECOUNT; i++)
-//	{
-//		lox.rangingTest(&measure, false);
-//		if (measure.RangeStatus != 4) {
-//			goodSamples++;
-//			currentMeasure += measure.RangeMilliMeter;
-//		}
-//	}
-//
-//	if (goodSamples > 0) {
-//		currentMeasure = currentMeasure / goodSamples;
-//
-//		deltaMeasure = currentMeasure - lastMeasure;
-//
-//		if (deltaMeasure < 0) {
-//			//flip to positive
-//			deltaMeasure = deltaMeasure * -1;
-//			direction = -1;
-//		}
-//		else {
-//			direction = 1;
-//		}
-//	}
-//
-//	lastMeasure = currentMeasure;
-//
-//	if (deltaMeasure > 0) {
-//		FillLEDsFromPaletteColors(startIndex);
-//		FastLED.show();
-//		FastLED.delay(500 / deltaMeasure);
-//	}
-//}
-
 
 //###################################################################################
+
 void FillLEDsFromPaletteColors(uint8_t colorIndex)
 {
 	uint8_t brightness = 255;
@@ -400,38 +389,6 @@ void FillLEDsFromPaletteColors(uint8_t colorIndex)
 //
 // FastLED provides several 'preset' palettes: RainbowColors_p, RainbowStripeColors_p,
 // OceanColors_p, CloudColors_p, LavaColors_p, ForestColors_p, and PartyColors_p.
-//
-// Additionally, you can manually define your own color palettes, or you can write
-// code that creates color palettes on the fly.  All are shown here.
-
-void ChangePalettePeriodically()
-{
-	uint8_t secondHand = (millis() / 1000) % 60;
-	static uint8_t lastSecond = 99;
-
-	if (lastSecond != secondHand) {
-		lastSecond = secondHand;
-		if (secondHand == 0) { currentPalette = RainbowColors_p;         currentBlending = LINEARBLEND; }
-		if (secondHand == 10) { currentPalette = RainbowStripeColors_p;   currentBlending = NOBLEND; }
-		if (secondHand == 15) { currentPalette = RainbowStripeColors_p;   currentBlending = LINEARBLEND; }
-		if (secondHand == 20) { SetupPurpleAndGreenPalette();             currentBlending = LINEARBLEND; }
-		if (secondHand == 25) { SetupTotallyRandomPalette();              currentBlending = LINEARBLEND; }
-		if (secondHand == 30) { SetupBlackAndWhiteStripedPalette();       currentBlending = NOBLEND; }
-		if (secondHand == 35) { SetupBlackAndWhiteStripedPalette();       currentBlending = LINEARBLEND; }
-		if (secondHand == 40) { currentPalette = CloudColors_p;           currentBlending = LINEARBLEND; }
-		if (secondHand == 45) { currentPalette = PartyColors_p;           currentBlending = LINEARBLEND; }
-		if (secondHand == 50) { currentPalette = myRedWhiteBluePalette_p; currentBlending = NOBLEND; }
-		if (secondHand == 55) { currentPalette = myRedWhiteBluePalette_p; currentBlending = LINEARBLEND; }
-	}
-}
-
-// This function fills the palette with totally random colors.
-void SetupTotallyRandomPalette()
-{
-	for (int i = 0; i < 16; i++) {
-		currentPalette[i] = CHSV(random8(), 255, random8());
-	}
-}
 
 // This function sets up a palette of black and white stripes,
 // using code.  Since the palette is effectively an array of
@@ -490,26 +447,3 @@ const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM =
 	CRGB::Black
 };
 
-
-
-// Additional notes on FastLED compact palettes:
-//
-// Normally, in computer graphics, the palette (or "color lookup table")
-// has 256 entries, each containing a specific 24-bit RGB color.  You can then
-// index into the color palette using a simple 8-bit (one byte) value.
-// A 256-entry color palette takes up 768 bytes of RAM, which on Arduino
-// is quite possibly "too many" bytes.
-//
-// FastLED does offer traditional 256-element palettes, for setups that
-// can afford the 768-byte cost in RAM.
-//
-// However, FastLED also offers a compact alternative.  FastLED offers
-// palettes that store 16 distinct entries, but can be accessed AS IF
-// they actually have 256 entries; this is accomplished by interpolating
-// between the 16 explicit entries to create fifteen intermediate palette
-// entries between each pair.
-//
-// So for example, if you set the first two explicit entries of a compact 
-// palette to Green (0,255,0) and Blue (0,0,255), and then retrieved 
-// the first sixteen entries from the virtual palette (of 256), you'd get
-// Green, followed by a smooth gradient from green-to-blue, and then Blue.
